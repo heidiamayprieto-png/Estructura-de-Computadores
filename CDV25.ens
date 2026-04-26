@@ -1,0 +1,623 @@
+; DEFINIMOS LAS MACROS PERTINENTES
+PUSH: MACRO (ra) 
+ subu r30, r30, 4 
+ st ra, r30, 0 
+ ENDMACRO 
+
+POP: MACRO (ra) 
+ ld ra, r30, 0 
+ addu r30, r30, 4 
+ ENDMACRO 
+
+LEA: MACRO (ra, ETI) ; Carga una dirección de memoria en ra 
+ or ra, r0, low(ETI) 
+ or.u ra, ra, high(ETI) 
+ ENDMACRO 
+
+LOAD: MACRO (ra, eti); Carga el contenido de una dirección de memoria en ra 
+ LEA(ra, eti) 
+ ld ra, ra, r0 
+ ENDMACRO 
+
+DBNZ: MACRO (ra, ETI) ; Decrementa el valor de ra y salta a ETI si no es cero 
+ subu ra, ra, 1 
+ cmp r7, ra, r0; 
+ bb1 ne , r7, ETI 
+ ENDMACRO 
+ 
+CMP1: MACRO(ra, rb, etiqueta, condicion) ;Compara dos valores y si cumplen la condición salta a la etiqueta
+    cmp r26, ra, rb
+    bb1 condicion, r26, etiqueta
+ENDMACRO
+
+CMP0: MACRO(ra, rb, etiqueta, condicion) ;Compara dos valores y si cumplen la condición salta a la etiqueta
+    cmp r26, ra, rb
+    bb0 condicion, r26, etiqueta
+ENDMACRO
+
+LLAMADA1: MACRO(reg, subrutina) ; Llama a una subrutina
+    PUSH(reg)
+    bsr subrutina
+    POP(reg)
+ENDMACRO
+
+LLAMADA2: MACRO(reg1, reg2, subrutina) ; LLama a una subrutina
+    PUSH(reg2)
+    PUSH(reg1)
+    bsr subrutina
+    POP(reg1)
+    POP(reg2)
+ENDMACRO
+
+; ZONA DE PRUEBAS DEL CÓDIGO
+org 0x8000; 
+C:  data "tres tristes tigres comen trigo en un trigal, el primer tigre que...\0"
+M: res 100 
+
+org 0x8400;    ; Espacio de memoria para el programa principal
+
+PPAL:
+or r30, r0, 0x9000    ; Inicializar r30 con la dirección de memoria de la pila
+or r29, r0, 0x60    ; valor auxiliar, por ejemplo, 0x60 (96 en decimal)
+
+; Cargar los parámetros y preparar la pila
+LEA(r2, C)
+LEA (r3, M)
+PUSH (r3)
+PUSH(r2)
+bsr Comprime    
+addu r30, r30, 8    
+stop   
+
+; SUBRUTINAS
+
+LongCad:
+      PUSH(r1)
+	  or r29,r0,0 				; Inicializa el contador de longitud cero, almacenandolo en r29
+	  ld r5,r30,4 				; Carga la direccion de r30 al registro r5
+bucle1:
+      ld.bu r3,r5,0 			; Carga el byte sin signo en la direccion apuntada por r5 a r3
+	  CMP1(r3, r0, fin1, eq) 	; Compara el valor de r3 con 0 y si r3 es igual a 0, salta al final
+	  addu r29,r29,1 			; Incrementamos el contador en 1 en r29.
+	  addu r5,r5,1 				; Avanza el puntero r5 al siguiente caracter de la cadena
+	  br bucle1    				; Se vuelve a repetir el bucle.
+fin1: 
+     POP(r1)
+	 jmp(r1) 					; Retorna a la direccion almacenada en r1
+
+BuscaCar:
+     PUSH(r1)
+	 ld.bu r3,r30,4 			; Cargar el C por valor
+	 ld r4,r30,8 				; Cargar el ref por direccion
+	 ld r5,r30,12 				; Cargar el from por valor 
+	 ld r6,r30,16 				; Cargar el valor de to por valor
+bucle2:
+     ld.bu r7,r4,r5  			; Cargar el caracter correspondiente de ref
+     CMP1(r3, r7, fin2, eq) 	; Comparamos si el caracter es equivalente a C y nos lleva a encontrado si son equivalenteS	 
+	 addu r5,r5,1 				; Aumentamos en 1 la posicion from
+	 CMP1(r5,r6, fin2, eq)    	; Comparar que from no sea igual que to. Si from es igual que to, salta a encontrado
+	 br bucle2 					; Se vuelve a repetir el bucle
+fin2:
+	 or r29,r5,0 				; Se guarda en r29 la posicion (from) donde se encontrado el caracter
+	 POP(r1)
+	 jmp(r1) 					; Devolvemos el control al programa llamante
+
+CoincidenCad:
+	 PUSH(r1)
+	 ld r3, r30, 4 				; Carga la direccion de la cadena 1
+	 ld r4, r30, 8 				; Carga la direccion de la cadena 2
+	 or r29, r0, 0 				; Se inicializa el valor de r29 a 0 (contador de coincidencias)
+bucle3:
+	 ld.bu r5, r3, 0 			; Cargar el caracter correspondiente de la cadena 1
+	 ld.bu r6, r4, 0 			; Cargar el caracter correspondiente de la cadena 2
+	 CMP1(r5, r0, fin3, eq) 	; Comprueba que el caracter no sea nulo de la cadena 1. Si el valor de la cadena 1 es nulo salta al final de bucle
+	 CMP1(r6, r0, fin3, eq) 	; Comprueba que el caracter no sea nulo de la cadena 2. Si el valor de la cadena 2 es nulo salta al final de bucle
+	 CMP0(r5, r6, fin3, eq) 	; Compara los caracteres y de la cadena 1 y de la cadena 2. Si los caracteres son diferentes se acaba el bucle
+	 addu r29, r29, 1 			; Aumenta el contador de coincidencias
+	 addu r3, r3, 1 			; Pasa al siguiente caracter de la cadena 1
+	 addu r4, r4, 1 			; Pasa al siguiente caracter de la cadena 2
+	 br bucle3 					; Salto incondicional para continual con el bucle
+fin3:	
+	POP(r1)
+	jmp(r1) 						; Devolvemos el control al programa llamante
+
+PoneBitA1:
+    PUSH(r1)                      ; Guardar dirección de retorno
+
+    ld r10, r30, 4                ; r10 ← DirZonaCB (dirección base)
+    ld r11, r30, 8                ; r11 ← NumBit (bit a poner a 1)
+
+    divu r12, r11, 8              ; r12 ← índice del byte: NumBit / 8
+    mulu r13, r12, 8              ; r13 ← NumBit_base = byte * 8
+    subu r14, r11, r13            ; r14 ← desplazamiento dentro del byte (bit en big endian)
+    subu r14, r0, r14
+    addu r14, r14, 7              ; r14 ← posición real en little endian: 7 - desplazamiento
+
+    ; Construimos una máscara desplazando 1 a la izquierda 'r14' veces
+    or r15, r0, 1                 ; r15 = máscara = 1 inicialmente
+    or r16, r14, r0               ; r16 ← contador del bucle
+
+desplazar:
+    CMP1(r16, r0, aplicar_mascara, eq)
+    mulu r15, r15, 2             ; máscara <<= 1
+    subu r16, r16, 1
+    br desplazar
+
+aplicar_mascara:
+    addu r17, r10, r12           ; dirección del byte = DirZonaCB + byte_index
+    ld.bu r18, r17, 0            ; cargar el byte actual
+    or r18, r18, r15             ; poner a 1 el bit deseado
+    st.b r18, r17, 0             ; guardar byte modificado
+
+    POP(r1)
+    jmp(r1)
+
+
+
+
+LeeBit:
+	PUSH(r1) 						; Guardar dirección de retorno
+	or r29, r0, r0 					; Inicializa el valor de retorno
+	ld r10, r30, 4  				; Dirección del mapa de bits
+	ld r11, r30, 8    				; Número de bits a leer
+	divu r2, r11, 8   				; Índice del byte
+	mulu r5, r2, 8    				; Base del byte
+	subu r5, r11, r5  				; Número de bit dentro del byte
+	or r6, r0, 7   
+	subu r7, r6, r5 				; Posición real del bit
+	ld.bu r12, r10, r2 				; Carga el byte 
+	or r6, r0, 2      
+bucle4:
+	CMP1(r7, r0, limpiarBit, eq) 	; Si r7 es igual a r0 salta a limpiarBit
+	subu r7, r7, 1					; Decrementa la posición del bit	
+	divu r12, r12, r6				; desplazamiento a la derecha
+	br bucle4 
+limpiarBit: 
+	clr r12, r12, 31<1>				; Limpia el bit
+	CMP1(r12, r0, fin5, eq)			; Si r12 es igual a r0, salta a fin5
+	addu r29, r29 , 1				; Añade 1 a r29
+	br fin5
+fin5:
+	POP(r1)
+	jmp (r1)						; Devolvemos el control al programa llamante
+
+Comprime:
+    PUSH(r1)                 ; Guarda r1 en la pila (registro de retorno)
+    PUSH(r31)                ; Guarda r31 en la pila (registro base para acceder a variables)
+    or r31, r30, r0          ; Copia el puntero de marco de pila actual en r31
+    ld r18, r31, 8           ; Carga la dirección del texto original (*texto) en r18
+
+    LLAMADA1(r18, LongCad)   ; Llama a la subrutina que calcula longitud de cadena
+
+    ld r19, r31, 12          ; Carga puntero a la zona de compresión (*cmpdo)
+    or r6, r29, r0           ; Copia longitud de texto calculada en r6
+    addu r3, r6, 3           ; r3 = longitud + 3 (para alineación a múltiplo de 4)
+    divu r3, r3, 4           ; Divide entre 4 (parte entera)
+    mulu r3, r3, 4           ; Multiplica por 4 para ajustar tamaño a múltiplo de 4
+    subu r30, r30, r3        ; Reserva espacio en la pila para la zona3 (buffer de compresión)
+    subu r30, r30, 32        ; Reserva espacio para variables locales adicionales
+
+    st r6, r31, -28          ; Guarda longitud de texto en marco de pila (-28)
+    or r7, r0, r30           ; r7 apunta a la zona3 (buffer de compresión)
+    or r8, r0, 0             ; r8 = offset dentro de zona3 (inicializado a 0)
+    or r9, r0, 0             ; r9 = offset dentro del texto original (inicializado a 0)
+    addu r19, r19, 5         ; r19 apunta al mapa de bits (offset +5)
+    or r10, r0, 0            ; r10 = contador de bits en el mapa (inicializado a 0)
+    or r11, r0, 8            ; r11 = contador para copiar los primeros 8 bytes sin comprimir
+
+pre_copia:
+    CMP1(r11, r0, ciclo_principal, eq) ; Compara r11 con 0. Si r11 == 0, pasa al ciclo principal
+    ld.bu r13, r18, r9       ; Carga byte sin signo del texto en offset r9
+    st.b r13, r7, r8         ; Copia byte a zona3 en offset r8
+    addu r8, r8, 1           ; Incrementa offset zona3
+    addu r9, r9, 1           ; Incrementa offset texto
+    subu r11, r11, 1         ; Decrementa contador de bytes sin comprimir
+    br pre_copia             ; Repite hasta copiar 8 bytes
+
+ciclo_principal:
+    ld.bu r13, r18, r9       ; Carga siguiente byte del texto original
+    CMP1(r13, 0x00, cierre, eq) ; Comprueba si es fin de cadena (0x00).Si es fin de cadena, salta al cierre
+
+    divu r14, r10, 8         ; Divide contador bits entre 8 (bytes completos)
+    mulu r14, r14, 8         ; Multiplica por 8 para alinear a byte
+    CMP1(r14, r10, continuar, ne) ; Compara byte alineado con contador real
+
+    or r15, r0, 0x00         ; Prepara valor 0 para limpiar bit en mapa de bits
+    divu r16, r10, 8         ; Calcula índice byte para mapa de bits
+    st.b r15, r19, r16       ; Limpia bit correspondiente en el mapa de bits
+
+continuar:
+    subu r17, r31, 4         ; Reserva espacio temporal en pila para guardar registros
+
+    ; Guarda registros temporales para la llamada a BuscaMax
+    st r7, r31, -8
+    st r8, r31, -12
+    st r9, r31, -16
+    st r19, r31, -20
+    st r10, r31, -24
+
+    PUSH(r17)                ; Pasa punteros y variables para la llamada
+    PUSH(r9)
+    PUSH(r18)
+    bsr BuscaMax             ; Llama a subrutina para buscar máxima coincidencia
+    POP(r18)                 ; Restaura registros tras la llamada
+    POP(r9)
+    POP(r17)
+
+    ; Restaura variables tras la llamada
+    ld r7, r31, -8
+    ld r8, r31, -12
+    ld r9, r31, -16
+    ld r19, r31, -20
+    ld r10, r31, -24
+
+    CMP1(r29, 4, compresion, ge) ; Compara longitud coincidencia con 4. Si es mayor o igual, salta a compresión
+
+    ; Si coincidencia es menor que 4, copia byte sin comprimir
+    ld.bu r15, r18, r9       ; Carga byte original
+    st.b r15, r7, r8         ; Copia a zona3
+    addu r8, r8, 1           ; Incrementa offset zona3
+    addu r10, r10, 1         ; Incrementa contador bits
+    addu r9, r9, 1           ; Incrementa offset texto
+    br ciclo_principal       ; Continúa ciclo principal
+
+compresion:
+    ld r17, r31, -4          ; Carga longitud de coincidencia
+    st.b r17, r7, r8         ; Almacena longitud como primer byte de compresión
+    addu r8, r8, 1
+    divu r17, r17, 256       ; Divide longitud para obtener segundo byte
+    st.b r17, r7, r8
+    addu r8, r8, 1
+    st.b r29, r7, r8         ; Almacena distancia o desplazamiento
+    addu r8, r8, 1
+    addu r9, r9, r29         ; Incrementa offset texto por longitud comprimida
+
+    ; Guarda variables para la siguiente iteración
+    st r7, r31, -8
+    st r8, r31, -12
+    st r9, r31, -16
+    st r19, r31, -20
+    st r18, r31, -24
+
+	LLAMADA2(r19, r10, PoneBitA1) ; Llama a subrutina que pone bit en 1 en mapa de bits
+
+    ; Restaura variables tras llamada
+    ld r7, r31, -8
+    ld r8, r31, -12
+    ld r9, r31, -16
+    ld r19, r31, -20
+    ld r18, r31, -24
+
+    addu r10, r10, 1         		; Incrementa contador bits
+    br ciclo_principal       		; Repite ciclo principal
+
+cierre:
+    ld r20, r31, 12          		; Carga puntero zona compresión
+    ld r21, r31, -28         		; Carga longitud total comprimida
+    st.b r21, r20, 0         		; Almacena byte bajo de longitud comprimida
+    divu r21, r21, 256       		; Divide longitud para obtener byte alto
+    addu r20, r20, 1
+    st.b r21, r20, 0        		; Almacena byte alto
+    addu r22, r0, 0x01       		; Valor constante 1 (fin de datos)
+    addu r20, r20, 1
+    st.b r22, r20, 0         		; Almacena byte de finalización
+    addu r20, r20, 1
+
+    addu r23, r10, r0        		; Copia contador bits
+    divu r23, r23, 8
+    mulu r23, r23, 8
+    CMP1(r23, r10, sin_ajuste, eq) ; Si contador está alineado, salta sin ajuste
+
+    divu r10, r10, 8
+    addu r10, r10, 1
+    addu r10, r10, 5
+    br continuar_final
+
+sin_ajuste:
+    divu r10, r10, 8
+    addu r10, r10, 5
+
+continuar_final:
+    addu r24, r10, r0
+    st.b r10, r20, r0        		; Almacena longitud final ajustada
+    addu r20, r20, 1
+    divu r10, r10, 256
+    st.b r10, r20, r0
+
+    subu r20, r20, 4
+    addu r20, r20, r24
+    or r9, r0, r0             		; Offset para copiar datos finales
+
+copiar_final:
+    CMP1(r8, r9, listo, eq)         ; Compara si se copiaron todos los bytes. Si sí, termina     
+    ld.bu r25, r7, r9        		; Carga byte de zona3
+    st.b r25, r20, r0         		; Copia byte a zona compresión final
+    addu r20, r20, 1
+    addu r9, r9, 1
+    br copiar_final
+
+listo:
+    ld r6, r31, 12           		; Carga puntero a zona compresión
+    subu r29, r20, r6        		; Calcula tamaño final comprimido
+    or r30, r31, r0         		; Prepara retorno
+    POP(r31)                 		; Restaura r31
+    POP(r1)                  		; Restaura r1
+    jmp(r1)                  		; Retorna a la rutina que llamó
+
+
+
+
+
+
+Descomprime:
+    PUSH (r1) 						; Guarda la dirección de retorno
+    PUSH (r31) 						; Guarda el marco de pila
+    or r31, r30, r0					; Nuevo marco de pila
+	
+    ld r8, r31, 8 					; Dirección del texto comprimido
+    ld r9, r31, 12 					; Dirección del buffer de salida
+	
+	or r18, r0, 0 					; Offset actual 
+    or r19, r0, 5 					; Offset de inicio de datos
+    or r20, r0, 0 					; Bit actual
+    or r21, r0, 0 					; Contador de bits leidos
+    or r22, r0, 8 					; Número de caracteres a copiar
+	
+    addu r10, r0, 5
+    addu r11, r8, r10 				; Inicio de mapa de bits
+	
+    ld.bu r12, r8, 3 				; Byte bajo del offset
+    ld.bu r13, r8, 4 				; Byte alto del offset
+    mulu r13, r13, 256 
+    ld.bu r15, r8, 0 
+    ld.bu r16, r8, 1
+    mulu r16, r16, 256
+    or r17, r15, r16 				; Longitud total del texto
+	or r14, r12, r13 				; Posición inicial
+	subu r30, r30, 20 				; Reserva de espacio en pila
+
+copia1:
+    CMP1(r22, 0, bucle5, eq) 		; Ir al bucle principal
+    ld.bu r23, r8, r14		
+    st.b r23, r9, r18
+    subu r22, r22, 1 				; Decrementador de contador de literales
+    subu r17, r17, 1 				; Decrementa la longitud restante
+	addu r18, r18, 1
+    addu r14, r14, 1
+    br copia1
+
+bucle5:
+	CMP1(r17, 0, fin7, eq) 			; Si ya no hay texto para copiar ir al final
+    st r18, r31, -4 
+    st r14, r31, -8
+    st r9, r31, -12
+    st r21, r31, -16
+    st r17, r31, -20
+	LLAMADA2(r11, r21, LeeBit) 		; Lee bit del mapa actual
+    ld r18, r31, -4
+    ld r14, r31, -8
+    ld r9, r31, -12
+    ld r21, r31, -16
+    ld r17, r31, -20
+    ld r8, r31, 8
+    ld r9, r31, 12
+	CMP1(r29, 0, copia3, eq) 		; Si es el bit correcto se copia
+    ld.bu r2, r8, r14
+    addu r14, r14, 1
+    ld.bu r3, r8, r14
+    mulu r3, r3, 256 				; Desplazamiento a la izquierda
+    addu r14, r14, 1
+    or r3, r2, r3 					; Guarda la posición
+    ld.bu r2, r8, r14 				; Guarda la longitud
+    addu r14, r14, 1
+    addu r21, r21, 1
+
+copia2:
+	CMP1(r2, 0, bucle5, eq) 		; Termina si ha copiado la subcadena
+    ld.bu r4, r9, r3
+    st.b r4, r9, r18 				; Copia el carácter 
+    subu r2, r2, 1
+    subu r17, r17, 1
+	addu r18, r18, 1 				; Avanza desc
+    addu r3, r3, 1 					; Avanza dentro de desc
+    br copia2
+	
+copia3:
+    ld.bu r5, r8, r14
+    st.b r5, r9, r18 				; Escribe el byte en desc
+	addu r21, r21, 1 				; Avanza bit
+    subu r17, r17, 1 				; Decrementa la longitud restante 
+    addu r18, r18, 1
+    addu r14, r14, 1 				; Avanza en cmpdo
+    br bucle5
+
+fin7:
+    or r6, r0, 0
+    st.b r6, r9, r18
+    or r29, r0, r18					; Longitud total escrita
+    addu r30, r30, 20
+    POP (r31)
+    POP (r1)
+    jmp (r1) 						; Devuelve el control al programa llamante
+
+Verifica:
+    PUSH(r1)
+    PUSH(r31)
+    or r31, r30, r0 				; Guarda marco
+
+    ld r10, r31, 8    				; Puntero del texto orignal
+	LLAMADA1(r10, LongCad) 			; Longitud del texto original
+    ld r11, r31, 12
+    st r29, r11, 0 					; Guarda la longitud del texto original
+
+	;Calcular el tamaño del buffer comprimido y la cabecera
+    addu r2, r29, 7 
+    divu r2, r2, 8
+    subu r2, r2, 1
+    addu r3, r2, r29
+	
+    addu r3, r3, 5 					; Total de bytes
+    or r4, r0, 0
+
+ajustar:
+    divu r5, r3, 4 					; Número de bloques de 4 que hay
+    mulu r5, r5, 4
+	CMP1(r5, r3, ajustada, eq) 		; Comparar si es múltiplo de 4
+    addu r3, r3, 1 					; Incrementa la longitud
+    br ajustar
+
+ajustada:
+	CMP1(r4, 1, preparar, eq)
+    subu r30, r30, r3 				; Ajustar tamaño de pila
+    subu r30, r30, 4 				; Reserva espacio para la dirección de retorno
+    st r3, r31, -4 					; Guardar el tamaño ajustado
+    or r3, r0, r29 					; Longitud original
+    addu r3, r3, 1 					; Añadir espacio
+    addu r4, r4, 1 					; Marcar que la pila está ajustada
+    br ajustar
+
+preparar:
+    subu r30, r30, r3 				; Ajustar para la longitud original
+    ld r10, r31, 8 					; Texto original
+    or r12, r0, r30 				; Direcciónn de la pila
+	LLAMADA2(r10, r12, Comprime)
+	
+	; Preparar para Descomprime
+    or r13, r0, r30
+    ld r3, r31, -4
+    addu r13, r13, r3
+	LLAMADA2(r12, r13, Descomprime)
+
+	; Verificar la longitud
+    ld r3, r31, -4
+    or r13, r0, r30
+    addu r13, r13, r3
+	LLAMADA1(r13, LongCad)
+    ld r11, r31, 16
+    st r29, r11, 0
+
+    ld r11, r31, 12
+    ld r2, r11, 0
+	CMP1(r2, r29, comparar, eq)
+    subu r29, r0, 1						; Error de longitud
+    br fin8
+
+comparar:
+    ld r10, r31, 8
+    or r13, r0, r30
+    ld r3, r31, -4
+    addu r13, r13, r3
+	LLAMADA2(r10, r13, CoincidenCad)
+    ld r11, r31, 12
+    ld r2, r11, 0
+	CMP1(r2, r29, correcto, eq)
+    subu r29, r0, 2 					; Error de contenido
+    br fin8
+
+correcto:
+    or r29, r0, 0 						; Todo correcto
+
+fin8:
+    or r30, r31, r31
+    POP(r31)
+    POP(r1)
+    jmp(r1) 							; Devuelve el control al programa llamante
+
+;
+; Debe incorporar este fichero con TODAS sus l�neas, sin modificar
+; ninguna de ellas, al final de su archivo CDV24.ens
+;
+; Este aviso se refiere tambi�n a las l�neas de comentario
+; 
+;
+;; Grupo:    230126 - Tue Oct 28 10:20:56 CET 2025
+
+BuscaMax:
+	PUSH (r1)
+	PUSH (r31)
+	or   r31, r30, 0
+	or   r28, r0, 0x3392
+	PUSH (r28)
+
+	ld   r10, r31, 8;  REF
+	ld   r11, r31, 12; MAX
+	ld   r12, r31, 16; Dir(JJ)
+
+	sub  r5, r0, 1		; guarda -1 en *JJ por si no se
+	st   r5, r12, 0		; encuentran coincidencias
+
+	addu r27, r0, r0  ; P
+	addu r28, r0, r0  ; L
+
+BucBM:
+	ld.bu r20, r10, r11	; C=REF(max)
+
+				; Reserva registros que
+				; necesita conservar
+	PUSH (r28) 	    	; L
+	PUSH (r11)	    	; MAX
+
+	     		    	; Par�metros de BuscaCar
+	PUSH (r27)	    	; P
+	PUSH (r10)	    	; REF
+	PUSH (r20)	   	; C
+	bsr  BuscaCar
+	POP  (r20)
+	POP  (r10)
+	POP  (r27)
+
+	POP  (r11)		; Recupera registros
+	POP  (r28)	        ; salvaguardados
+
+	cmp  r5, r29, r11	; nuevo P es >= MAX ??
+	bb1  hs, r5, finBM
+	addu r27, r29, r0	; P = nuevo P
+	
+	addu r13, r10, r27	; *REF(P)
+	addu r14, r10, r11 	; *REF(max)	
+
+	PUSH (r11)     		; Reserva registros que
+	PUSH (r10)		; necesita conservar
+	PUSH (r28)
+	PUSH (r27)
+	
+	PUSH (r14)		; Par�metros de CoincidenCad
+	PUSH (r13)
+	bsr  CoincidenCad
+	POP  (r13)
+	POP  (r14)
+	
+	POP  (r27)		; Recupera registros
+	POP  (r28)		; salvaguardados
+	POP  (r10)
+	POP  (r11)
+
+	cmp r5, r29, r28	; Comprueba si longitud > L
+	bb1 le, r5, contBM	; Si no lo es, contin�a
+	cmp r5, r29, 255	; Comprueba si longitud > 255
+	bb1 le, r5, noLimBM	; Si no lo es, contin�a
+	addu r29, r0, 255	; Si lo es, limita su valor a 255
+	
+noLimBM:
+	addu r28, r29, r0	; actualiza L
+	ld   r12, r31, 16	; Dir(JJ)
+	st   r27, r12, r0	; actualiza P en *JJ
+	bb1 ge, r5, finBM	; Si coincidencia >= 255 termina
+contBM: 
+	addu r27, r27, 1	; Pasa al siguiente car�cter
+	cmp  r5, r27, r11	; Es P>=max ?
+	bb1  hs, r5, finBM
+	
+	br   BucBM   		; Nueva b�squeda del primer car�cter
+
+finBM:
+	addu r29, r28, r0	; asigna L al valor de retorno r29
+	  
+	or   r27, r0, 0xB3E
+	POP  (r28)
+
+	or   r30, r31, 0
+	POP  (r31)
+	POP  (r1)
+	jmp  (r1)
+;; Grupo:    230126
