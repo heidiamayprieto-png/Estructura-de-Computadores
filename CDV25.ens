@@ -530,7 +530,7 @@ fin8:
 ; Este aviso se refiere tambi�n a las l�neas de comentario
 ; 
 ;
-;; Grupo:    230126 - Tue Oct 28 10:20:56 CET 2025
+
 
 BuscaMax:
 	PUSH (r1)
@@ -620,4 +620,3 @@ finBM:
 	POP  (r31)
 	POP  (r1)
 	jmp  (r1)
-;; Grupo:    230126
